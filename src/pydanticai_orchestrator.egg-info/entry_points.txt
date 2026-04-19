@@ -1,0 +1,3 @@
+[console_scripts]
+pydanticai-orchestrator = pydanticai_orchestrator.cli:main
+pydanticai-orchestrator-telegram = pydanticai_orchestrator.telegram_bot:main

@@ -1,0 +1,22 @@
+[project]
+name = "my-pydanticai"
+version = "0.1.0"
+description = "Experimental MCP-first orchestration fork built on PydanticAI concepts"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic-ai>=1.84.1",
+  "pydantic-settings>=2.0.0",
+  "python-telegram-bot>=21.0",
+]
+
+[project.scripts]
+my-pydanticai = "pydanticai_orchestrator.cli:main"
+my-pydanticai-telegram = "pydanticai_orchestrator.telegram_bot:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
