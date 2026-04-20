@@ -162,6 +162,15 @@ class OrchestratorService:
     def get_run_events(self, run_id: str) -> list[OrchestrationEvent]:
         return self._run_store.load_events(run_id)
 
+    def mark_run_waiting(self, run_id: str, reason: str, node: str = 'review') -> OrchestrationRunState:
+        state = self.get_run_state(run_id)
+        state.status = 'waiting'
+        state.current_node = node
+        state.waiting_for = reason
+        self._save_state(state)
+        self._append_event(state, 'run_waiting', node, {'reason': reason, 'run_id': run_id})
+        return state
+
     def _append_event(
         self,
         state: OrchestrationRunState,

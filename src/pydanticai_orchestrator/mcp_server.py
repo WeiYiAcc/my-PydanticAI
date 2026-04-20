@@ -37,7 +37,7 @@ def create_server():
         name="my-pydanticai",
         instructions=(
             "MCP surface for my-PydanticAI orchestration. "
-            "Use this server to route prompts, inspect persisted runs, continue suspended runs, or invoke specific workers with normalized structured results."
+            "Use this server to route prompts, inspect persisted runs, continue suspended runs, mark runs as waiting, or invoke specific workers with normalized structured results."
         ),
     )
 
@@ -54,6 +54,10 @@ def create_server():
     def continue_run(run_id: str) -> str:
         result: OrchestrationReport = _service().continue_run(run_id)
         return _json_text(result)
+
+    @mcp.tool()
+    def mark_run_waiting(run_id: str, reason: str, node: str = 'review') -> str:
+        return _json_text(_service().mark_run_waiting(run_id, reason=reason, node=node))
 
     @mcp.tool()
     def run_prompt(prompt: str) -> str:

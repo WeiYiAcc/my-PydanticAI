@@ -33,6 +33,11 @@ def build_parser() -> argparse.ArgumentParser:
     continue_run = sub.add_parser('continue-run')
     continue_run.add_argument('run_id')
 
+    mark_waiting = sub.add_parser('mark-waiting')
+    mark_waiting.add_argument('run_id')
+    mark_waiting.add_argument('reason')
+    mark_waiting.add_argument('--node', default='review')
+
     run_events = sub.add_parser('run-events')
     run_events.add_argument('run_id')
 
@@ -83,6 +88,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == 'continue-run':
         print(service.continue_run(args.run_id).model_dump_json(indent=2))
+        return 0
+    if args.command == 'mark-waiting':
+        print(service.mark_run_waiting(args.run_id, reason=args.reason, node=args.node).model_dump_json(indent=2))
         return 0
     if args.command == 'run-events':
         print(json.dumps([event.model_dump(mode='json') for event in service.get_run_events(args.run_id)], indent=2))

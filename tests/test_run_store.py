@@ -181,3 +181,41 @@ class ServicePersistenceTests(unittest.TestCase):
             self.assertEqual(resumed.run_id, "run-init-1")
             self.assertEqual(resumed.route.target, "hermes")
             self.assertEqual(service.get_run_state("run-init-1").status, "completed")
+
+    def test_mark_run_waiting_updates_state_and_event_log(self):
+        with TemporaryDirectory() as tmpdir:
+            settings = AppSettings(orch_state_dir=tmpdir)
+            service = OrchestratorService(settings)
+            result = service.handle_request("implement a tiny python function that returns 42")
+
+            waiting = service.mark_run_waiting(result.run_id, reason="need approval")
+            self.assertEqual(waiting.status, "waiting")
+            self.assertEqual(waiting.current_node, "review")
+            self.assertEqual(waiting.waiting_for, "need approval")
+
+            events = service.get_run_events(result.run_id)
+            event_types = [event.event_type for event in events]
+            self.assertIn("run_waiting", event_types)
+
+    def test_mark_run_waiting_rejects_unknown_run(self):
+        with TemporaryDirectory() as tmpdir:
+            settings = AppSettings(orch_state_dir=tmpdir)
+            service = OrchestratorService(settings)
+
+            with self.assertRaises(FileNotFoundError):
+                service.mark_run_waiting("run-missing", reason="no run")
+
+    def test_continue_run_after_mark_waiting_uses_existing_route(self):
+        with TemporaryDirectory() as tmpdir:
+            settings = AppSettings(orch_state_dir=tmpdir)
+            service = OrchestratorService(settings)
+            result = service.handle_request("compare hermes and pi for this task")
+            waiting = service.mark_run_waiting(result.run_id, reason="manual review")
+            self.assertEqual(waiting.status, "waiting")
+
+            resumed = service.continue_run(result.run_id)
+            self.assertEqual(resumed.run_id, result.run_id)
+            self.assertEqual(resumed.route.target, "multi_worker")
+            final_state = service.get_run_state(result.run_id)
+            self.assertEqual(final_state.status, "completed")
+            self.assertIsNotNone(final_state.review)
