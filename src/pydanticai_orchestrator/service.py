@@ -11,6 +11,7 @@ from pydanticai_orchestrator.schemas import (
     PromptResponse,
     ReviewResult,
     RouteDecision,
+    RunSummary,
     WorkerResult,
     WorkflowResult,
 )
@@ -148,6 +149,9 @@ class OrchestratorService:
 
     def list_runs(self) -> list[OrchestrationRunState]:
         return self._run_store.list_runs()
+
+    def list_run_summaries(self) -> list[RunSummary]:
+        return [RunSummary.from_state(run) for run in self.list_runs()]
 
     def get_run_state(self, run_id: str) -> OrchestrationRunState:
         return self._run_store.load_state(run_id)

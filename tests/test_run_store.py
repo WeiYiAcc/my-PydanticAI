@@ -103,6 +103,12 @@ class ServicePersistenceTests(unittest.TestCase):
             runs = service.list_runs()
             self.assertEqual([run.run_id for run in runs], [second.run_id, first.run_id])
 
+            summaries = service.list_run_summaries()
+            self.assertEqual([summary.run_id for summary in summaries], [second.run_id, first.run_id])
+            self.assertEqual(summaries[0].status, 'completed')
+            self.assertEqual(summaries[0].route_target, 'multi_worker')
+            self.assertTrue(summaries[0].answer_preview)
+
     def test_continue_run_replays_waiting_run_to_completion(self):
         with TemporaryDirectory() as tmpdir:
             settings = AppSettings(orch_state_dir=tmpdir)

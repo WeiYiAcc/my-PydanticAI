@@ -41,6 +41,13 @@ def new_run_id() -> str:
     return f"run-{uuid4().hex}"
 
 
+def build_answer_preview(answer: str, limit: int = 120) -> str:
+    normalized = ' '.join(answer.split())
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[: limit - 1] + '…'
+
+
 class BridgeReturnValue(BaseModel):
     ok: bool = True
     answer: str = ''
@@ -137,6 +144,30 @@ class OrchestrationRunState(BaseModel):
     waiting_for: str | None = None
     error: str | None = None
     event_count: int = 0
+
+
+class RunSummary(BaseModel):
+    run_id: str
+    status: RunStatus
+    current_node: NodeName
+    created_at: datetime
+    updated_at: datetime
+    route_target: RouteTarget | None = None
+    answer_preview: str = ''
+    error: str | None = None
+
+    @classmethod
+    def from_state(cls, state: OrchestrationRunState) -> 'RunSummary':
+        return cls(
+            run_id=state.run_id,
+            status=state.status,
+            current_node=state.current_node,
+            created_at=state.created_at,
+            updated_at=state.updated_at,
+            route_target=state.route.target if state.route else None,
+            answer_preview=build_answer_preview(state.answer),
+            error=state.error,
+        )
 
 
 class OrchestrationReport(BaseModel):

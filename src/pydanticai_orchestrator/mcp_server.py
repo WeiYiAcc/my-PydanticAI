@@ -103,8 +103,9 @@ def create_server():
         return _json_text(_service().get_latest_run_state())
 
     @mcp.tool()
-    def list_runs(limit: int = 20) -> str:
-        runs = _service().list_runs()
+    def list_runs(limit: int = 20, summary_only: bool = True) -> str:
+        service = _service()
+        runs = service.list_run_summaries() if summary_only else service.list_runs()
         return _json_text(runs[: max(0, limit)])
 
     return mcp

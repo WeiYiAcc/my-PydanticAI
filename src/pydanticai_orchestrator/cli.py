@@ -40,6 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     list_runs = sub.add_parser('list-runs')
     list_runs.add_argument('--limit', type=int, default=20)
+    list_runs.add_argument('--full', action='store_true')
     return parser
 
 
@@ -91,7 +92,11 @@ def main(argv: list[str] | None = None) -> int:
         print('null' if result is None else result.model_dump_json(indent=2))
         return 0
     if args.command == 'list-runs':
-        print(json.dumps([run.model_dump(mode='json') for run in service.list_runs()[: max(0, args.limit)]], indent=2))
+        if args.full:
+            payload = [run.model_dump(mode='json') for run in service.list_runs()[: max(0, args.limit)]]
+        else:
+            payload = [summary.model_dump(mode='json') for summary in service.list_run_summaries()[: max(0, args.limit)]]
+        print(json.dumps(payload, indent=2))
         return 0
     parser.print_help()
     return 1
