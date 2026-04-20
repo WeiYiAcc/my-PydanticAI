@@ -1,4 +1,3 @@
-import os
 import unittest
 
 from pydanticai_orchestrator.settings import AppSettings
@@ -11,3 +10,4 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.orch_hermes_mode, 'mock')
         self.assertEqual(settings.orch_pi_mode, 'mock')
         self.assertEqual(settings.orch_stokowski_mode, 'mock')
+        self.assertEqual(settings.orch_state_dir, '.orchestrator-state')

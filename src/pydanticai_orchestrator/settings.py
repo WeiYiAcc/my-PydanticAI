@@ -4,6 +4,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +24,7 @@ class AppSettings(BaseSettings):
     orch_stokowski_submit_template: str = 'stokowski {workflow} --dry-run'
     orch_worker_timeout_seconds: int = 120
     orch_max_parallel_workers: int = 2
+    orch_state_dir: str = '.orchestrator-state'
 
     orch_hermes_mcp_stdio: str = 'hermes mcp serve'
     orch_pi_mcp_stdio: str = 'node /home/weiyiacc/.pi/agent/git/github.com/WeiYiAcc/pi-mcp-adapter/pi-mcp-serve.js'
@@ -33,6 +35,10 @@ class AppSettings(BaseSettings):
     orch_claude_code_mcp_import: bool = True
 
     telegram_bot_token: str = ''
+
+    @property
+    def orch_state_path(self) -> Path:
+        return Path(self.orch_state_dir).expanduser()
 
 
 def _load_env_vars(env_file: str = '.env') -> None:

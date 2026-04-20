@@ -21,7 +21,7 @@ def _service() -> OrchestratorService:
 
 def _json_text(value) -> str:
     if hasattr(value, "model_dump"):
-        return json.dumps(value.model_dump(), ensure_ascii=False, indent=2)
+        return json.dumps(value.model_dump(mode='json'), ensure_ascii=False, indent=2)
     return json.dumps(value, ensure_ascii=False, indent=2)
 
 
@@ -37,7 +37,7 @@ def create_server():
         name="my-pydanticai",
         instructions=(
             "MCP surface for my-PydanticAI orchestration. "
-            "Use this server to route prompts or invoke specific workers with normalized structured results."
+            "Use this server to route prompts, inspect persisted runs, or invoke specific workers with normalized structured results."
         ),
     )
 
@@ -84,6 +84,23 @@ def create_server():
         else:
             result = service.stokowski_submit(task)
         return _json_text(result)
+
+    @mcp.tool()
+    def get_run_state(run_id: str) -> str:
+        return _json_text(_service().get_run_state(run_id))
+
+    @mcp.tool()
+    def get_run_events(run_id: str) -> str:
+        return _json_text(_service().get_run_events(run_id))
+
+    @mcp.tool()
+    def get_latest_run_state() -> str:
+        return _json_text(_service().get_latest_run_state())
+
+    @mcp.tool()
+    def list_runs(limit: int = 20) -> str:
+        runs = _service().list_runs()
+        return _json_text(runs[: max(0, limit)])
 
     return mcp
 

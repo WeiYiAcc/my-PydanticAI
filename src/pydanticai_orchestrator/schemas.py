@@ -1,11 +1,43 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Literal
+from uuid import uuid4
+
 from pydantic import BaseModel, Field
 
 
 WorkerName = Literal["hermes", "pi", "stokowski", "codex"]
 RouteTarget = Literal["hermes", "pi", "stokowski_dry_run", "stokowski_status", "multi_worker", "direct_answer", "codex"]
+RunStatus = Literal["pending", "running", "waiting", "completed", "failed"]
+NodeName = Literal[
+    "init",
+    "routing",
+    "worker_execution",
+    "workflow_execution",
+    "review",
+    "direct_answer",
+    "completed",
+    "failed",
+]
+EventType = Literal[
+    "run_started",
+    "route_decided",
+    "worker_completed",
+    "workflow_completed",
+    "review_completed",
+    "run_waiting",
+    "run_completed",
+    "run_failed",
+]
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def new_run_id() -> str:
+    return f"run-{uuid4().hex}"
 
 
 class BridgeReturnValue(BaseModel):
@@ -81,9 +113,35 @@ class RouteDecision(BaseModel):
     workers: list[WorkerName] = Field(default_factory=list)
 
 
+class OrchestrationEvent(BaseModel):
+    seq: int
+    event_type: EventType
+    node: NodeName
+    created_at: datetime = Field(default_factory=utc_now)
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class OrchestrationRunState(BaseModel):
+    run_id: str = Field(default_factory=new_run_id)
+    prompt: str
+    status: RunStatus = "pending"
+    current_node: NodeName = "init"
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+    route: RouteDecision | None = None
+    worker_results: list[WorkerResult] = Field(default_factory=list)
+    workflow_results: list[WorkflowResult] = Field(default_factory=list)
+    review: ReviewResult | None = None
+    answer: str = ''
+    waiting_for: str | None = None
+    error: str | None = None
+    event_count: int = 0
+
+
 class OrchestrationReport(BaseModel):
     route: RouteDecision
     worker_results: list[WorkerResult] = Field(default_factory=list)
     workflow_results: list[WorkflowResult] = Field(default_factory=list)
     review: ReviewResult | None = None
     answer: str
+    run_id: str | None = None

@@ -5,7 +5,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pydanticai_orchestrator.adapters import CodexMcpAdapter, HermesAdapter, PiAdapter, StokowskiAdapter
 from pydanticai_orchestrator.agent import OrchestratorDeps, build_agent
 from pydanticai_orchestrator.schemas import (
+    OrchestrationEvent,
     OrchestrationReport,
+    OrchestrationRunState,
     PromptResponse,
     ReviewResult,
     RouteDecision,
@@ -13,6 +15,7 @@ from pydanticai_orchestrator.schemas import (
     WorkflowResult,
 )
 from pydanticai_orchestrator.settings import AppSettings
+from pydanticai_orchestrator.state_store import FileRunStore
 
 
 class OrchestratorService:
@@ -41,6 +44,7 @@ class OrchestratorService:
             submit_template=settings.orch_stokowski_submit_template,
         )
         self._agent = build_agent(self, settings.orch_model)
+        self._run_store = FileRunStore(settings.orch_state_path)
 
     def hermes(self, task: str) -> WorkerResult:
         return self._hermes.run_task(task)
@@ -75,6 +79,7 @@ class OrchestratorService:
             'mcporter_bin': self.settings.orch_mcporter_bin,
             'codex_mcp_import': self.settings.orch_codex_mcp_import,
             'claude_code_mcp_import': self.settings.orch_claude_code_mcp_import,
+            'state_dir': str(self.settings.orch_state_path),
         }
 
     def route_request(self, prompt: str) -> RouteDecision:
@@ -141,41 +146,116 @@ class OrchestratorService:
             return PromptResponse(answer=output)
         return PromptResponse(answer=str(output))
 
-    def handle_request(self, prompt: str) -> OrchestrationReport:
-        route = self.route_request(prompt)
-        worker_results: list[WorkerResult] = []
-        workflow_results: list[WorkflowResult] = []
-        review: ReviewResult | None = None
+    def list_runs(self) -> list[OrchestrationRunState]:
+        return self._run_store.list_runs()
 
-        if route.target == 'hermes':
-            worker_results.append(self.hermes(route.task or prompt))
-            answer = worker_results[0].summary
-        elif route.target == 'codex':
-            worker_results.append(self.codex(route.task or prompt))
-            answer = worker_results[0].summary
-        elif route.target == 'pi':
-            worker_results.append(self.pi(route.task or prompt))
-            answer = worker_results[0].summary
-        elif route.target == 'stokowski_dry_run':
-            workflow_results.append(self.stokowski_dry_run())
-            answer = workflow_results[0].summary
-        elif route.target == 'stokowski_status':
-            workflow_results.append(self.stokowski_status())
-            answer = workflow_results[0].summary
-        elif route.target == 'multi_worker':
-            worker_results = self.run_workers_parallel(route.task or prompt, route.workers)
-            review = self.review_results(worker_results)
-            answer = '\n\n'.join(
-                [f'[{r.worker}] {r.summary}' for r in worker_results]
-                + ([f'[review] {review.summary}'] if review else [])
-            )
-        else:
-            answer = 'No specific worker selected. Rephrase with Hermes, Pi, or workflow intent.'
+    def get_run_state(self, run_id: str) -> OrchestrationRunState:
+        return self._run_store.load_state(run_id)
 
-        return OrchestrationReport(
-            route=route,
-            worker_results=worker_results,
-            workflow_results=workflow_results,
-            review=review,
-            answer=answer,
+    def get_latest_run_state(self) -> OrchestrationRunState | None:
+        return self._run_store.load_latest_state()
+
+    def get_run_events(self, run_id: str) -> list[OrchestrationEvent]:
+        return self._run_store.load_events(run_id)
+
+    def _append_event(
+        self,
+        state: OrchestrationRunState,
+        event_type: str,
+        node: str,
+        payload: dict | None = None,
+    ) -> None:
+        state.event_count += 1
+        event = OrchestrationEvent(
+            seq=state.event_count,
+            event_type=event_type,
+            node=node,
+            payload=payload or {},
         )
+        self._run_store.append_event(state.run_id, event)
+
+    def _save_state(self, state: OrchestrationRunState) -> None:
+        state.updated_at = state.updated_at.now(state.updated_at.tzinfo)
+        self._run_store.save_state(state)
+
+    def handle_request(self, prompt: str) -> OrchestrationReport:
+        state = OrchestrationRunState(prompt=prompt, status='running', current_node='init')
+        self._save_state(state)
+        self._append_event(state, 'run_started', 'init', {'prompt': prompt})
+
+        try:
+            route = self.route_request(prompt)
+            state.route = route
+            state.current_node = 'routing'
+            self._save_state(state)
+            self._append_event(state, 'route_decided', 'routing', route.model_dump(mode='json'))
+
+            worker_results: list[WorkerResult] = []
+            workflow_results: list[WorkflowResult] = []
+            review: ReviewResult | None = None
+
+            if route.target == 'hermes':
+                state.current_node = 'worker_execution'
+                worker_results.append(self.hermes(route.task or prompt))
+                answer = worker_results[0].summary
+                self._append_event(state, 'worker_completed', 'worker_execution', worker_results[0].model_dump(mode='json'))
+            elif route.target == 'codex':
+                state.current_node = 'worker_execution'
+                worker_results.append(self.codex(route.task or prompt))
+                answer = worker_results[0].summary
+                self._append_event(state, 'worker_completed', 'worker_execution', worker_results[0].model_dump(mode='json'))
+            elif route.target == 'pi':
+                state.current_node = 'worker_execution'
+                worker_results.append(self.pi(route.task or prompt))
+                answer = worker_results[0].summary
+                self._append_event(state, 'worker_completed', 'worker_execution', worker_results[0].model_dump(mode='json'))
+            elif route.target == 'stokowski_dry_run':
+                state.current_node = 'workflow_execution'
+                workflow_results.append(self.stokowski_dry_run())
+                answer = workflow_results[0].summary
+                self._append_event(state, 'workflow_completed', 'workflow_execution', workflow_results[0].model_dump(mode='json'))
+            elif route.target == 'stokowski_status':
+                state.current_node = 'workflow_execution'
+                workflow_results.append(self.stokowski_status())
+                answer = workflow_results[0].summary
+                self._append_event(state, 'workflow_completed', 'workflow_execution', workflow_results[0].model_dump(mode='json'))
+            elif route.target == 'multi_worker':
+                state.current_node = 'worker_execution'
+                worker_results = self.run_workers_parallel(route.task or prompt, route.workers)
+                for worker_result in worker_results:
+                    self._append_event(state, 'worker_completed', 'worker_execution', worker_result.model_dump(mode='json'))
+                state.current_node = 'review'
+                review = self.review_results(worker_results)
+                answer = '\n\n'.join(
+                    [f'[{r.worker}] {r.summary}' for r in worker_results]
+                    + ([f'[review] {review.summary}'] if review else [])
+                )
+                self._append_event(state, 'review_completed', 'review', review.model_dump(mode='json'))
+            else:
+                state.current_node = 'direct_answer'
+                answer = 'No specific worker selected. Rephrase with Hermes, Pi, or workflow intent.'
+
+            state.worker_results = worker_results
+            state.workflow_results = workflow_results
+            state.review = review
+            state.answer = answer
+            state.status = 'completed'
+            state.current_node = 'completed'
+            self._save_state(state)
+            self._append_event(state, 'run_completed', 'completed', {'answer': answer})
+
+            return OrchestrationReport(
+                route=route,
+                worker_results=worker_results,
+                workflow_results=workflow_results,
+                review=review,
+                answer=answer,
+                run_id=state.run_id,
+            )
+        except Exception as exc:
+            state.status = 'failed'
+            state.current_node = 'failed'
+            state.error = str(exc)
+            self._save_state(state)
+            self._append_event(state, 'run_failed', 'failed', {'error': str(exc)})
+            raise
