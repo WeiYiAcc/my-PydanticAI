@@ -22,6 +22,7 @@ NodeName = Literal[
 ]
 EventType = Literal[
     "run_started",
+    "run_resumed",
     "route_decided",
     "worker_completed",
     "workflow_completed",

@@ -30,6 +30,9 @@ def build_parser() -> argparse.ArgumentParser:
     get_run = sub.add_parser('get-run')
     get_run.add_argument('run_id')
 
+    continue_run = sub.add_parser('continue-run')
+    continue_run.add_argument('run_id')
+
     run_events = sub.add_parser('run-events')
     run_events.add_argument('run_id')
 
@@ -76,6 +79,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == 'get-run':
         print(service.get_run_state(args.run_id).model_dump_json(indent=2))
+        return 0
+    if args.command == 'continue-run':
+        print(service.continue_run(args.run_id).model_dump_json(indent=2))
         return 0
     if args.command == 'run-events':
         print(json.dumps([event.model_dump(mode='json') for event in service.get_run_events(args.run_id)], indent=2))

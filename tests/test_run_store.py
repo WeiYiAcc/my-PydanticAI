@@ -102,3 +102,76 @@ class ServicePersistenceTests(unittest.TestCase):
 
             runs = service.list_runs()
             self.assertEqual([run.run_id for run in runs], [second.run_id, first.run_id])
+
+    def test_continue_run_replays_waiting_run_to_completion(self):
+        with TemporaryDirectory() as tmpdir:
+            settings = AppSettings(orch_state_dir=tmpdir)
+            service = OrchestratorService(settings)
+            store = FileRunStore(tmpdir)
+
+            state = OrchestrationRunState(
+                run_id="run-waiting-1",
+                prompt="implement a tiny python function that returns 42",
+                status="waiting",
+                current_node="routing",
+                route=RouteDecision(target="hermes", task="implement a tiny python function that returns 42", rationale="test"),
+                waiting_for="resume",
+            )
+            store.save_state(state)
+
+            resumed = service.continue_run("run-waiting-1")
+
+            self.assertEqual(resumed.run_id, "run-waiting-1")
+            self.assertEqual(resumed.route.target, "hermes")
+            persisted = service.get_run_state("run-waiting-1")
+            self.assertEqual(persisted.status, "completed")
+            self.assertEqual(persisted.current_node, "completed")
+            event_types = [event.event_type for event in service.get_run_events("run-waiting-1")]
+            self.assertIn("run_resumed", event_types)
+            self.assertIn("run_completed", event_types)
+
+    def test_continue_run_rejects_completed_run(self):
+        with TemporaryDirectory() as tmpdir:
+            settings = AppSettings(orch_state_dir=tmpdir)
+            service = OrchestratorService(settings)
+            result = service.handle_request("implement a tiny python function that returns 42")
+
+            with self.assertRaisesRegex(ValueError, "already completed"):
+                service.continue_run(result.run_id)
+
+    def test_continue_run_rejects_missing_route_for_non_init_state(self):
+        with TemporaryDirectory() as tmpdir:
+            settings = AppSettings(orch_state_dir=tmpdir)
+            service = OrchestratorService(settings)
+            store = FileRunStore(tmpdir)
+            store.save_state(
+                OrchestrationRunState(
+                    run_id="run-bad-1",
+                    prompt="implement a tiny python function that returns 42",
+                    status="waiting",
+                    current_node="worker_execution",
+                )
+            )
+
+            with self.assertRaisesRegex(ValueError, "missing route"):
+                service.continue_run("run-bad-1")
+
+    def test_continue_run_from_init_routes_and_completes(self):
+        with TemporaryDirectory() as tmpdir:
+            settings = AppSettings(orch_state_dir=tmpdir)
+            service = OrchestratorService(settings)
+            store = FileRunStore(tmpdir)
+            store.save_state(
+                OrchestrationRunState(
+                    run_id="run-init-1",
+                    prompt="implement a tiny python function that returns 42",
+                    status="waiting",
+                    current_node="init",
+                    waiting_for="resume",
+                )
+            )
+
+            resumed = service.continue_run("run-init-1")
+            self.assertEqual(resumed.run_id, "run-init-1")
+            self.assertEqual(resumed.route.target, "hermes")
+            self.assertEqual(service.get_run_state("run-init-1").status, "completed")
