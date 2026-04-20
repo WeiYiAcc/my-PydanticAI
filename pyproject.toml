@@ -13,6 +13,7 @@ dependencies = [
 [project.scripts]
 my-pydanticai = "pydanticai_orchestrator.cli:main"
 my-pydanticai-telegram = "pydanticai_orchestrator.telegram_bot:main"
+my-pydanticai-mcp = "pydanticai_orchestrator.mcp_server:main"
 
 [build-system]
 requires = ["setuptools>=68"]
