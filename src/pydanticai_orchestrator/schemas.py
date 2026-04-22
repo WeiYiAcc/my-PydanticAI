@@ -7,8 +7,8 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 
-WorkerName = Literal["hermes", "pi", "stokowski", "codex"]
-RouteTarget = Literal["hermes", "pi", "stokowski_dry_run", "stokowski_status", "multi_worker", "direct_answer", "codex"]
+WorkerName = Literal["hermes", "pi", "stokowski", "codex", "claude_code"]
+RouteTarget = Literal["hermes", "pi", "stokowski_dry_run", "stokowski_status", "multi_worker", "direct_answer", "codex", "claude_code"]
 RunStatus = Literal["pending", "running", "waiting", "completed", "failed"]
 NodeName = Literal[
     "init",

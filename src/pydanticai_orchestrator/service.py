@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from pydanticai_orchestrator.adapters import CodexMcpAdapter, HermesAdapter, PiAdapter, StokowskiAdapter
+from pydanticai_orchestrator.adapters import ClaudeCodeAdapter, CodexMcpAdapter, HermesAdapter, PiAdapter, StokowskiAdapter
 from pydanticai_orchestrator.agent import OrchestratorDeps, build_agent
 from pydanticai_orchestrator.schemas import (
     OrchestrationEvent,
@@ -25,24 +25,28 @@ class OrchestratorService:
         self._hermes = HermesAdapter(
             mode=settings.orch_hermes_mode,
             timeout_seconds=settings.orch_worker_timeout_seconds,
-            command_template=settings.orch_hermes_command_template,
+            mcp_command=settings.orch_hermes_mcp_command,
         )
         self._pi = PiAdapter(
             mode=settings.orch_pi_mode,
             timeout_seconds=settings.orch_worker_timeout_seconds,
-            command_template=settings.orch_pi_command_template,
+            pi_bin=settings.orch_pi_bin,
         )
         self._codex = CodexMcpAdapter(
-            mode=settings.orch_hermes_mode,
+            mode=settings.orch_codex_mode,
             timeout_seconds=settings.orch_worker_timeout_seconds,
-            command_template=settings.orch_codex_command_template,
+            mcp_command=settings.orch_codex_mcp_command,
+        )
+        self._claude_code = ClaudeCodeAdapter(
+            mode=settings.orch_claude_code_mode,
+            timeout_seconds=settings.orch_worker_timeout_seconds,
+            mcp_command=settings.orch_claude_code_mcp_command,
         )
         self._stokowski = StokowskiAdapter(
             mode=settings.orch_stokowski_mode,
             timeout_seconds=settings.orch_worker_timeout_seconds,
             binary=settings.orch_stokowski_bin,
             workflow_path=settings.orch_stokowski_workflow_path,
-            submit_template=settings.orch_stokowski_submit_template,
         )
         self._agent = build_agent(self, settings.orch_model)
         self._run_store = FileRunStore(settings.orch_state_path)
@@ -55,6 +59,9 @@ class OrchestratorService:
 
     def pi(self, task: str) -> WorkerResult:
         return self._pi.run_task(task)
+
+    def claude_code(self, task: str) -> WorkerResult:
+        return self._claude_code.run_task(task)
 
     def stokowski_dry_run(self) -> WorkflowResult:
         return self._stokowski.dry_run()
@@ -70,16 +77,17 @@ class OrchestratorService:
             'model': self.settings.orch_model,
             'hermes_mode': self.settings.orch_hermes_mode,
             'pi_mode': self.settings.orch_pi_mode,
+            'codex_mode': self.settings.orch_codex_mode,
+            'claude_code_mode': self.settings.orch_claude_code_mode,
             'stokowski_mode': self.settings.orch_stokowski_mode,
+            'hermes_mcp': self.settings.orch_hermes_mcp_command,
+            'codex_mcp': self.settings.orch_codex_mcp_command,
+            'claude_code_mcp': self.settings.orch_claude_code_mcp_command,
+            'pi_bin': self.settings.orch_pi_bin,
+            'stokowski_bin': self.settings.orch_stokowski_bin,
             'stokowski_workflow_path': self.settings.orch_stokowski_workflow_path,
             'telegram_configured': bool(self.settings.telegram_bot_token),
             'max_parallel_workers': self.settings.orch_max_parallel_workers,
-            'hermes_mcp_stdio': self.settings.orch_hermes_mcp_stdio,
-            'pi_mcp_stdio': self.settings.orch_pi_mcp_stdio,
-            'codex_mcp_stdio': self.settings.orch_codex_mcp_stdio,
-            'mcporter_bin': self.settings.orch_mcporter_bin,
-            'codex_mcp_import': self.settings.orch_codex_mcp_import,
-            'claude_code_mcp_import': self.settings.orch_claude_code_mcp_import,
             'state_dir': str(self.settings.orch_state_path),
         }
 
@@ -100,6 +108,8 @@ class OrchestratorService:
                 use_multi_worker=True,
                 workers=['hermes', 'pi'],
             )
+        if 'claude code' in lowered or 'claude-code' in lowered:
+            return RouteDecision(target='claude_code', task=prompt, rationale='claude-code-oriented request')
         if 'codex' in lowered:
             return RouteDecision(target='codex', task=prompt, rationale='codex-oriented MCP worker request')
         if 'pi' in lowered or 'pi-mono' in lowered:
@@ -127,6 +137,7 @@ class OrchestratorService:
             'hermes': lambda: self.hermes(task),
             'pi': lambda: self.pi(task),
             'codex': lambda: self.codex(task),
+            'claude_code': lambda: self.claude_code(task),
         }
         results: list[WorkerResult] = []
         selected = [w for w in workers if w in call_map][: self.settings.orch_max_parallel_workers]
@@ -219,6 +230,11 @@ class OrchestratorService:
         elif route.target == 'pi':
             state.current_node = 'worker_execution'
             worker_results = [self.pi(route.task or state.prompt)]
+            answer = worker_results[0].summary
+            self._append_event(state, 'worker_completed', 'worker_execution', worker_results[0].model_dump(mode='json'))
+        elif route.target == 'claude_code':
+            state.current_node = 'worker_execution'
+            worker_results = [self.claude_code(route.task or state.prompt)]
             answer = worker_results[0].summary
             self._append_event(state, 'worker_completed', 'worker_execution', worker_results[0].model_dump(mode='json'))
         elif route.target == 'stokowski_dry_run':

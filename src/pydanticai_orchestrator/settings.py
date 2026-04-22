@@ -15,24 +15,26 @@ class AppSettings(BaseSettings):
 
     orch_hermes_mode: Literal['mock', 'real'] = 'mock'
     orch_pi_mode: Literal['mock', 'real'] = 'mock'
+    orch_codex_mode: Literal['mock', 'real'] = 'mock'
+    orch_claude_code_mode: Literal['mock', 'real'] = 'mock'
     orch_stokowski_mode: Literal['mock', 'real'] = 'mock'
 
-    orch_hermes_command_template: str = 'npx mcporter call run_task prompt={prompt} --stdio "node /home/weiyiacc/.pi/agent/git/github.com/WeiYiAcc/pi-mcp-adapter/hermes-task-mcp-serve.js" --name hermes-task --output json'
-    orch_pi_command_template: str = 'npx mcporter call run_prompt prompt={prompt} --stdio "node /home/weiyiacc/.pi/agent/git/github.com/WeiYiAcc/pi-mcp-adapter/pi-mcp-serve.js" --name pi-agent --output json'
+    # MCP stdio servers (Hermes, Codex, Claude Code have native MCP)
+    orch_hermes_mcp_command: str = 'hermes mcp serve'
+    orch_codex_mcp_command: str = 'codex mcp-server'
+    orch_claude_code_mcp_command: str = 'claude mcp serve'
+
+    # Pi — direct CLI (no native MCP server)
+    orch_pi_bin: str = 'pi'
+
+    # Stokowski — CLI
     orch_stokowski_bin: str = 'stokowski'
     orch_stokowski_workflow_path: str = ''
-    orch_stokowski_submit_template: str = 'stokowski {workflow} --dry-run'
+
+    # General
     orch_worker_timeout_seconds: int = 120
     orch_max_parallel_workers: int = 2
     orch_state_dir: str = '.orchestrator-state'
-
-    orch_hermes_mcp_stdio: str = 'hermes mcp serve'
-    orch_pi_mcp_stdio: str = 'node /home/weiyiacc/.pi/agent/git/github.com/WeiYiAcc/pi-mcp-adapter/pi-mcp-serve.js'
-    orch_codex_mcp_stdio: str = 'codex mcp-server'
-    orch_codex_command_template: str = 'npx mcporter call codex prompt={prompt} sandbox="workspace-write" approval-policy="never" cwd="/home/weiyiacc/projects/pydanticai-orchestrator" --stdio "codex mcp-server" --name codex-mcp --output json'
-    orch_mcporter_bin: str = 'npx mcporter'
-    orch_codex_mcp_import: bool = True
-    orch_claude_code_mcp_import: bool = True
 
     telegram_bot_token: str = ''
 

@@ -1,19 +1,24 @@
 from __future__ import annotations
 
 from pydanticai_orchestrator.adapters.base import BaseAdapter
-from pydanticai_orchestrator.adapters.mcp_common import call_mcp_tool, worker_result_from_mcp
+from pydanticai_orchestrator.adapters.mcp_stdio import call_mcp_stdio, worker_result_from_mcp_stdio
 from pydanticai_orchestrator.schemas import WorkerResult
-from pydanticai_orchestrator.shell import render_command
 
 
 class HermesAdapter(BaseAdapter):
-    def __init__(self, *, mode: str, timeout_seconds: int, command_template: str) -> None:
+    """Hermes adapter via native MCP server (hermes mcp serve)."""
+
+    def __init__(self, *, mode: str, timeout_seconds: int, mcp_command: str = 'hermes mcp serve') -> None:
         super().__init__(name='hermes', mode=mode, timeout_seconds=timeout_seconds)
-        self.command_template = command_template
+        self.mcp_command = mcp_command
 
     def run_task(self, prompt: str) -> WorkerResult:
         if self.is_mock():
-            return self.mock_result(f'[MOCK Hermes] Would handle task via MCP bridge: {prompt}')
-        command = render_command(self.command_template, prompt=prompt)
-        result = call_mcp_tool(command=command, timeout_seconds=self.timeout_seconds)
-        return worker_result_from_mcp(worker='hermes', mode='real', mcp_result=result)
+            return self.mock_result(f'[MOCK Hermes] Would handle task: {prompt}')
+        result = call_mcp_stdio(
+            server_command=self.mcp_command,
+            tool_name='run_task',
+            arguments={'prompt': prompt},
+            timeout_seconds=self.timeout_seconds,
+        )
+        return worker_result_from_mcp_stdio(worker='hermes', result=result)

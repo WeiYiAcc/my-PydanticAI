@@ -8,11 +8,10 @@ from pydanticai_orchestrator.shell import run_command
 
 
 class StokowskiAdapter(BaseAdapter):
-    def __init__(self, *, mode: str, timeout_seconds: int, binary: str, workflow_path: str, submit_template: str) -> None:
+    def __init__(self, *, mode: str, timeout_seconds: int, binary: str, workflow_path: str) -> None:
         super().__init__(name='stokowski', mode=mode, timeout_seconds=timeout_seconds)
         self.binary = binary
         self.workflow_path = workflow_path
-        self.submit_template = submit_template
 
     def _missing(self, action: str) -> WorkflowResult:
         return WorkflowResult(action=action, ok=False, mode='real', summary='ORCH_STOKOWSKI_WORKFLOW_PATH is not set', stderr='missing workflow path')
@@ -44,7 +43,7 @@ class StokowskiAdapter(BaseAdapter):
             return WorkflowResult(action='submit', ok=True, mode='mock', summary=f'[MOCK Stokowski] Would submit task: {task}', structured={'task': task})
         if not self.workflow_path:
             return self._missing('submit')
-        command = self.submit_template.format(workflow=shlex.quote(self.workflow_path), task=shlex.quote(task))
+        command = f"{shlex.quote(self.binary)} {shlex.quote(self.workflow_path)} --task {shlex.quote(task)}"
         result = run_command(command, self.timeout_seconds)
         ok = result.returncode == 0
         summary = result.stdout or result.stderr or '(no output)'
